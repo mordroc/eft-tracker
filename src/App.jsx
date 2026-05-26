@@ -39,6 +39,66 @@ const QUERY = `
   }
 `;
 
+// --- NEW Component: Top Values Dashboard ---
+const TopValuesTab = ({ items }) => {
+  // Sort copies of the items array to get the top 10 for each category
+  const topFlea = [...items].sort((a, b) => b.price - a.price).slice(0, 10);
+  const topTrader = [...items].sort((a, b) => b.traderPrice - a.traderPrice).slice(0, 10);
+
+  return (
+    <div style={{ animation: 'fadeIn 0.3s' }}>
+      <p style={{ color: '#aaa', marginBottom: '20px' }}>
+        <em>Quick reference guide for high-value loot prioritization.</em>
+      </p>
+      
+      {/* Use CSS Grid for a clean side-by-side layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+        
+        {/* Flea Market Column */}
+        <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444' }}>
+          <h3 style={{ margin: '0 0 15px 0', color: '#ff9900', borderBottom: '1px solid #444', paddingBottom: '10px' }}>
+            Top 10: Flea Market Value
+          </h3>
+          <ol style={{ margin: 0, paddingLeft: '25px', color: '#eaeaea' }}>
+            {topFlea.map(item => (
+              <li key={`flea-${item.id}`} style={{ marginBottom: '12px', borderBottom: '1px dashed #333', paddingBottom: '5px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'bold' }}>{item.name}</span>
+                  <span style={{ color: '#ff9900', fontWeight: 'bold' }}>₽{item.price.toLocaleString()}</span>
+                </div>
+                <div style={{ fontSize: '0.8em', color: '#888' }}>
+                  Value/Square: ₽{item.valuePerSquare.toLocaleString()}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* Trader Value Column */}
+        <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444' }}>
+          <h3 style={{ margin: '0 0 15px 0', color: '#00ff00', borderBottom: '1px solid #444', paddingBottom: '10px' }}>
+            Top 10: Trader Value
+          </h3>
+          <ol style={{ margin: 0, paddingLeft: '25px', color: '#eaeaea' }}>
+            {topTrader.map(item => (
+              <li key={`trader-${item.id}`} style={{ marginBottom: '12px', borderBottom: '1px dashed #333', paddingBottom: '5px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'bold' }}>{item.name}</span>
+                  <span style={{ color: '#00ff00', fontWeight: 'bold' }}>₽{item.traderPrice.toLocaleString()}</span>
+                </div>
+                <div style={{ fontSize: '0.8em', color: '#888' }}>
+                  Value/Square: ₽{item.valuePerSquare.toLocaleString()}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
 // --- Master Shopping List (Read-Only Summary) ---
 const ItemTable = ({ items, progress, completedProjects, consumedCounts }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -182,7 +242,6 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
           const isExpanded = expanded[station.name];
           const allLevelsComplete = station.levels.length > 0 && station.levels.every(lvl => completedProjects.has(`hideout_${station.name}_${lvl.level}`));
           
-          // Determine if the next available level for this station is currently locked
           const nextLevel = station.levels.find(lvl => !completedProjects.has(`hideout_${station.name}_${lvl.level}`));
           let isStationLocked = false;
           let missingReqs = [];
@@ -192,13 +251,11 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
             isStationLocked = missingReqs.length > 0;
           }
 
-          // Darken background if completed OR if currently locked
           const cardBg = allLevelsComplete ? '#111' : (isStationLocked ? '#1a1a1a' : '#222');
           
-          // Determine Title Color
-          let titleColor = '#ff9900'; // Default Bright Orange
-          if (allLevelsComplete) titleColor = '#666'; // Gray out if done
-          else if (isStationLocked) titleColor = '#885522'; // Darken to muted brown/orange if locked
+          let titleColor = '#ff9900'; 
+          if (allLevelsComplete) titleColor = '#666'; 
+          else if (isStationLocked) titleColor = '#885522'; 
 
           return (
             <div key={station.name} style={{ backgroundColor: cardBg, borderRadius: '8px', padding: '15px', border: '1px solid #444', transition: 'all 0.3s' }}>
@@ -210,7 +267,6 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
                   <h3 style={{ margin: 0, color: titleColor, textDecoration: allLevelsComplete ? 'line-through' : 'none' }}>
                     {station.name}
                   </h3>
-                  {/* Show Locked Warning right under the station title */}
                   {isStationLocked && (
                     <span style={{ fontSize: '0.85em', color: '#a85c5c', display: 'block', marginTop: '6px' }}>
                       Locked - Needs: {missingReqs.map(r => `${r.name} Lv${r.level}`).join(', ')}
@@ -357,7 +413,9 @@ function App() {
   const [error, setError] = useState(null);
   
   const [activeTab, setActiveTab] = useState('Hideout Stations');
-  const tabs = ['Hideout Stations', 'Early Quests', 'Master Shopping List'];
+  
+  // Added "Top Values" to the Tabs
+  const tabs = ['Hideout Stations', 'Early Quests', 'Master Shopping List', 'Top Values'];
   
   const [progress, setProgress] = useState(() => {
     const savedProgress = localStorage.getItem('tarkov-progress');
@@ -533,6 +591,7 @@ function App() {
       {activeTab === 'Hideout Stations' && <StationBreakdown stationsData={stationsData} progress={progress} updateProgress={updateProgress} completedProjects={completedProjects} />}
       {activeTab === 'Early Quests' && <TaskBreakdown tasksData={tasksData} progress={progress} updateProgress={updateProgress} completedProjects={completedProjects} />}
       {activeTab === 'Master Shopping List' && <ItemTable items={trackedItems} progress={progress} completedProjects={completedProjects} consumedCounts={consumedCounts} />}
+      {activeTab === 'Top Values' && <TopValuesTab items={trackedItems} />}
 
     </div>
   );
