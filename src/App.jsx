@@ -39,9 +39,8 @@ const QUERY = `
   }
 `;
 
-// --- NEW Component: Top Values Dashboard ---
+// --- Top Values Dashboard ---
 const TopValuesTab = ({ items }) => {
-  // Sort copies of the items array to get the top 10 for each category
   const topFlea = [...items].sort((a, b) => b.price - a.price).slice(0, 10);
   const topTrader = [...items].sort((a, b) => b.traderPrice - a.traderPrice).slice(0, 10);
 
@@ -51,10 +50,7 @@ const TopValuesTab = ({ items }) => {
         <em>Quick reference guide for high-value loot prioritization.</em>
       </p>
       
-      {/* Use CSS Grid for a clean side-by-side layout */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-        
-        {/* Flea Market Column */}
         <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444' }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#ff9900', borderBottom: '1px solid #444', paddingBottom: '10px' }}>
             Top 10: Flea Market Value
@@ -74,7 +70,6 @@ const TopValuesTab = ({ items }) => {
           </ol>
         </div>
 
-        {/* Trader Value Column */}
         <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444' }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#00ff00', borderBottom: '1px solid #444', paddingBottom: '10px' }}>
             Top 10: Trader Value
@@ -93,7 +88,6 @@ const TopValuesTab = ({ items }) => {
             ))}
           </ol>
         </div>
-
       </div>
     </div>
   );
@@ -173,12 +167,12 @@ const ItemTable = ({ items, progress, completedProjects, consumedCounts }) => {
                 
                 <td style={{ padding: '10px', textAlign: 'center' }}>
                   <span style={{ fontSize: '1.2em', fontWeight: 'bold', color: hasEnough ? '#00ff00' : '#eaeaea' }}>
-                    {activeGathered} / {totalNeeded}
+                    {activeGathered.toLocaleString()} / {totalNeeded.toLocaleString()}
                   </span>
                 </td>
 
-                <td style={{ padding: '10px' }}>{activeHideoutNeed > 0 ? activeHideoutNeed : '-'}</td>
-                <td style={{ padding: '10px' }}>{activeQuestNeed > 0 ? activeQuestNeed : '-'}</td>
+                <td style={{ padding: '10px' }}>{activeHideoutNeed > 0 ? activeHideoutNeed.toLocaleString() : '-'}</td>
+                <td style={{ padding: '10px' }}>{activeQuestNeed > 0 ? activeQuestNeed.toLocaleString() : '-'}</td>
                 <td style={{ padding: '10px', color: '#eaeaea' }}>₽{item.price.toLocaleString()}</td>
                 <td style={{ padding: '10px', color: isTraderHigher ? '#00ff00' : '#aaa', fontWeight: isTraderHigher ? 'bold' : 'normal' }}>
                   ₽{item.traderPrice.toLocaleString()}
@@ -252,7 +246,6 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
           }
 
           const cardBg = allLevelsComplete ? '#111' : (isStationLocked ? '#1a1a1a' : '#222');
-          
           let titleColor = '#ff9900'; 
           if (allLevelsComplete) titleColor = '#666'; 
           else if (isStationLocked) titleColor = '#885522'; 
@@ -302,17 +295,39 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
                         const allocatedCount = progress[progressKey] || 0;
                         const hasEnough = allocatedCount >= item.count;
                         const isItemMatch = searchTerm && item.name.toLowerCase().includes(searchTerm.toLowerCase());
+                        
+                        // NEW CHECK: Is this item a currency?
+                        const isCurrency = ['Roubles', 'Euros', 'Dollars'].includes(item.name);
 
                         return (
                           <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '5px', backgroundColor: hasEnough ? '#1a331a' : (isItemMatch ? '#4a3b1a' : 'transparent'), borderRadius: '4px', border: isItemMatch ? '1px solid #ff9900' : 'none' }}>
                             <span style={{ flex: 1, fontWeight: isItemMatch ? 'bold' : 'normal', color: isItemMatch ? '#ff9900' : '#eaeaea' }}>{item.name}</span>
                             
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <button onClick={() => updateProgress(progressKey, -1)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>-</button>
-                              <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold', width: '40px', textAlign: 'center' }}>
-                                {allocatedCount} / {item.count}
-                              </span>
-                              <button onClick={() => updateProgress(progressKey, 1, item.count)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>+</button>
+                              {isCurrency ? (
+                                <>
+                                  <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold' }}>
+                                    {item.count.toLocaleString()}
+                                  </span>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={hasEnough}
+                                    onChange={(e) => {
+                                      const amountToUpdate = e.target.checked ? (item.count - allocatedCount) : -allocatedCount;
+                                      updateProgress(progressKey, amountToUpdate);
+                                    }}
+                                    style={{ width: '20px', height: '20px', cursor: 'pointer', marginLeft: '5px' }}
+                                  />
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => updateProgress(progressKey, -1)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>-</button>
+                                  <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold', width: '40px', textAlign: 'center' }}>
+                                    {allocatedCount} / {item.count}
+                                  </span>
+                                  <button onClick={() => updateProgress(progressKey, 1, item.count)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>+</button>
+                                </>
+                              )}
                             </div>
                           </li>
                         );
@@ -377,6 +392,9 @@ const TaskBreakdown = ({ tasksData, progress, updateProgress, completedProjects 
                     const allocatedCount = progress[progressKey] || 0;
                     const hasEnough = allocatedCount >= item.count;
                     const isItemMatch = searchTerm && item.name.toLowerCase().includes(searchTerm.toLowerCase());
+                    
+                    // NEW CHECK: Is this item a currency?
+                    const isCurrency = ['Roubles', 'Euros', 'Dollars'].includes(item.name);
 
                     return (
                       <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '5px', backgroundColor: hasEnough ? '#1a331a' : (isItemMatch ? '#283655' : 'transparent'), borderRadius: '4px', border: isItemMatch ? '1px solid #3366cc' : 'none' }}>
@@ -386,11 +404,30 @@ const TaskBreakdown = ({ tasksData, progress, updateProgress, completedProjects 
                         </span>
                         
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <button onClick={() => updateProgress(progressKey, -1)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>-</button>
-                          <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold', width: '40px', textAlign: 'center' }}>
-                            {allocatedCount} / {item.count}
-                          </span>
-                          <button onClick={() => updateProgress(progressKey, 1, item.count)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>+</button>
+                          {isCurrency ? (
+                            <>
+                              <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold' }}>
+                                {item.count.toLocaleString()}
+                              </span>
+                              <input 
+                                type="checkbox" 
+                                checked={hasEnough}
+                                onChange={(e) => {
+                                  const amountToUpdate = e.target.checked ? (item.count - allocatedCount) : -allocatedCount;
+                                  updateProgress(progressKey, amountToUpdate);
+                                }}
+                                style={{ width: '20px', height: '20px', cursor: 'pointer', marginLeft: '5px' }}
+                              />
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => updateProgress(progressKey, -1)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>-</button>
+                              <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold', width: '40px', textAlign: 'center' }}>
+                                {allocatedCount} / {item.count}
+                              </span>
+                              <button onClick={() => updateProgress(progressKey, 1, item.count)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>+</button>
+                            </>
+                          )}
                         </div>
                       </li>
                     );
@@ -413,8 +450,6 @@ function App() {
   const [error, setError] = useState(null);
   
   const [activeTab, setActiveTab] = useState('Hideout Stations');
-  
-  // Added "Top Values" to the Tabs
   const tabs = ['Hideout Stations', 'Early Quests', 'Master Shopping List', 'Top Values'];
   
   const [progress, setProgress] = useState(() => {
