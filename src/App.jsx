@@ -39,24 +39,47 @@ const QUERY = `
   }
 `;
 
-// --- Top Values Dashboard ---
+// --- UPDATED Component: All Values Dashboard with Search ---
 const TopValuesTab = ({ items }) => {
-  const topFlea = [...items].sort((a, b) => b.price - a.price).slice(0, 10);
-  const topTrader = [...items].sort((a, b) => b.traderPrice - a.traderPrice).slice(0, 10);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // 1. Filter items first based on what the user types
+  const filteredItems = items.filter(item => 
+    item.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // 2. Sort the remaining items (removed .slice() to show all)
+  const sortedByFlea = [...filteredItems].sort((a, b) => b.price - a.price);
+  const sortedByTrader = [...filteredItems].sort((a, b) => b.traderPrice - a.traderPrice);
 
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
-      <p style={{ color: '#aaa', marginBottom: '20px' }}>
-        <em>Quick reference guide for high-value loot prioritization.</em>
+      <p style={{ color: '#aaa', marginBottom: '15px' }}>
+        <em>Quick reference guide for loot prioritization. Search to find the best vendor for any item.</em>
       </p>
       
+      {/* 3. Added the Search Input */}
+      <input 
+        type="text" 
+        placeholder="Search for an item (e.g., GPU)..." 
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        style={{ 
+          width: '100%', padding: '12px', marginBottom: '20px', borderRadius: '4px', 
+          border: '1px solid #555', backgroundColor: '#222', color: '#eaeaea',
+          fontSize: '16px', boxSizing: 'border-box'
+        }}
+      />
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+        
+        {/* Flea Market Column */}
         <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444' }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#ff9900', borderBottom: '1px solid #444', paddingBottom: '10px' }}>
-            Top 10: Flea Market Value
+            Flea Market Value
           </h3>
           <ol style={{ margin: 0, paddingLeft: '25px', color: '#eaeaea' }}>
-            {topFlea.map(item => (
+            {sortedByFlea.map(item => (
               <li key={`flea-${item.id}`} style={{ marginBottom: '12px', borderBottom: '1px dashed #333', paddingBottom: '5px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold' }}>{item.name}</span>
@@ -67,15 +90,17 @@ const TopValuesTab = ({ items }) => {
                 </div>
               </li>
             ))}
+            {sortedByFlea.length === 0 && <li style={{ color: '#888', listStyle: 'none', marginLeft: '-25px' }}>No items found.</li>}
           </ol>
         </div>
 
+        {/* Trader Value Column */}
         <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444' }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#00ff00', borderBottom: '1px solid #444', paddingBottom: '10px' }}>
-            Top 10: Trader Value
+            Trader Value
           </h3>
           <ol style={{ margin: 0, paddingLeft: '25px', color: '#eaeaea' }}>
-            {topTrader.map(item => (
+            {sortedByTrader.map(item => (
               <li key={`trader-${item.id}`} style={{ marginBottom: '12px', borderBottom: '1px dashed #333', paddingBottom: '5px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold' }}>{item.name}</span>
@@ -86,8 +111,10 @@ const TopValuesTab = ({ items }) => {
                 </div>
               </li>
             ))}
+            {sortedByTrader.length === 0 && <li style={{ color: '#888', listStyle: 'none', marginLeft: '-25px' }}>No items found.</li>}
           </ol>
         </div>
+
       </div>
     </div>
   );
@@ -296,7 +323,6 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
                         const hasEnough = allocatedCount >= item.count;
                         const isItemMatch = searchTerm && item.name.toLowerCase().includes(searchTerm.toLowerCase());
                         
-                        // NEW CHECK: Is this item a currency?
                         const isCurrency = ['Roubles', 'Euros', 'Dollars'].includes(item.name);
 
                         return (
@@ -393,7 +419,6 @@ const TaskBreakdown = ({ tasksData, progress, updateProgress, completedProjects 
                     const hasEnough = allocatedCount >= item.count;
                     const isItemMatch = searchTerm && item.name.toLowerCase().includes(searchTerm.toLowerCase());
                     
-                    // NEW CHECK: Is this item a currency?
                     const isCurrency = ['Roubles', 'Euros', 'Dollars'].includes(item.name);
 
                     return (
