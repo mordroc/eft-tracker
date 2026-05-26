@@ -3,8 +3,13 @@ import './App.css';
 
 const TARKOV_API = 'https://api.tarkov.dev/graphql';
 
+// 1. UPDATED QUERY: We added the global `items` array at the top to fetch everything
 const QUERY = `
   query {
+    items {
+      id, name, shortName, width, height, avg24hPrice
+      sellFor { price, vendor { name } }
+    }
     hideoutStations {
       name
       levels {
@@ -39,29 +44,28 @@ const QUERY = `
   }
 `;
 
-// --- UPDATED Component: All Values Dashboard with Search ---
+// --- Top Values Dashboard (Now a Full Loot Dictionary) ---
 const TopValuesTab = ({ items }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. Filter items first based on what the user types
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // 2. Sort the remaining items (removed .slice() to show all)
-  const sortedByFlea = [...filteredItems].sort((a, b) => b.price - a.price);
-  const sortedByTrader = [...filteredItems].sort((a, b) => b.traderPrice - a.traderPrice);
+  // Use .slice(0, 100) so we don't render 3,000+ items at once and freeze the browser.
+  // It will show the top 100 matches based on your search.
+  const sortedByFlea = [...filteredItems].sort((a, b) => b.price - a.price).slice(0, 100);
+  const sortedByTrader = [...filteredItems].sort((a, b) => b.traderPrice - a.traderPrice).slice(0, 100);
 
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
       <p style={{ color: '#aaa', marginBottom: '15px' }}>
-        <em>Quick reference guide for loot prioritization. Search to find the best vendor for any item.</em>
+        <em>Global Loot Dictionary. Search any item in the game to find its best vendor. (Showing top 100 matches to keep the app fast).</em>
       </p>
       
-      {/* 3. Added the Search Input */}
       <input 
         type="text" 
-        placeholder="Search for an item (e.g., GPU)..." 
+        placeholder="Search for an item (e.g., RAM stick, GPU)..." 
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         style={{ 
@@ -74,8 +78,8 @@ const TopValuesTab = ({ items }) => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
         
         {/* Flea Market Column */}
-        <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444' }}>
-          <h3 style={{ margin: '0 0 15px 0', color: '#ff9900', borderBottom: '1px solid #444', paddingBottom: '10px' }}>
+        <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444', maxHeight: '70vh', overflowY: 'auto' }}>
+          <h3 style={{ margin: '0 0 15px 0', color: '#ff9900', borderBottom: '1px solid #444', paddingBottom: '10px', position: 'sticky', top: 0, backgroundColor: '#222' }}>
             Flea Market Value
           </h3>
           <ol style={{ margin: 0, paddingLeft: '25px', color: '#eaeaea' }}>
@@ -95,8 +99,8 @@ const TopValuesTab = ({ items }) => {
         </div>
 
         {/* Trader Value Column */}
-        <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444' }}>
-          <h3 style={{ margin: '0 0 15px 0', color: '#00ff00', borderBottom: '1px solid #444', paddingBottom: '10px' }}>
+        <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444', maxHeight: '70vh', overflowY: 'auto' }}>
+          <h3 style={{ margin: '0 0 15px 0', color: '#00ff00', borderBottom: '1px solid #444', paddingBottom: '10px', position: 'sticky', top: 0, backgroundColor: '#222' }}>
             Trader Value
           </h3>
           <ol style={{ margin: 0, paddingLeft: '25px', color: '#eaeaea' }}>
@@ -469,13 +473,14 @@ const TaskBreakdown = ({ tasksData, progress, updateProgress, completedProjects 
 
 function App() {
   const [trackedItems, setTrackedItems] = useState([]);
+  const [globalItems, setGlobalItems] = useState([]); // 2. NEW STATE: Holds all 3,000+ items
   const [stationsData, setStationsData] = useState([]);
   const [tasksData, setTasksData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  const [activeTab, setActiveTab] = useState('Hideout Stations');
-  const tabs = ['Hideout Stations', 'Early Quests', 'Master Shopping List', 'Top Values'];
+  const [activeTab, setActiveTab] = useState('Top Values');
+  const tabs = ['Top Values', 'Hideout Stations', 'Early Quests', 'Master Shopping List'];
   
   const [progress, setProgress] = useState(() => {
     const savedProgress = localStorage.getItem('tarkov-progress');
@@ -510,6 +515,7 @@ function App() {
     const itemMap = new Map();
     const stationHierarchy = []; 
     const tasksHierarchy = []; 
+    const allItemsArray = []; // Array for the Top Values tab
 
     const getHighestTraderPrice = (itemData) => {
       if (!itemData.sellFor) return 0;
@@ -518,6 +524,28 @@ function App() {
         .map(s => s.price);
       return traderPrices.length > 0 ? Math.max(...traderPrices) : 0;
     };
+
+    // 3. Process the global item list first
+    if (data.items) {
+      data.items.forEach(apiItem => {
+        const price = apiItem.avg24hPrice || 0;
+        const traderPrice = getHighestTraderPrice(apiItem);
+        const bestPrice = Math.max(price, traderPrice);
+        
+        // Only include actual lootable/sellable items in the dictionary
+        if (bestPrice > 0) {
+          const squares = (apiItem.width || 1) * (apiItem.height || 1);
+          allItemsArray.push({
+            id: apiItem.id,
+            name: apiItem.name,
+            price: price,
+            traderPrice: traderPrice,
+            valuePerSquare: Math.round(bestPrice / squares)
+          });
+        }
+      });
+      setGlobalItems(allItemsArray);
+    }
 
     const setupItemData = (reqItem) => {
       const itemId = reqItem.id;
@@ -651,7 +679,9 @@ function App() {
       {activeTab === 'Hideout Stations' && <StationBreakdown stationsData={stationsData} progress={progress} updateProgress={updateProgress} completedProjects={completedProjects} />}
       {activeTab === 'Early Quests' && <TaskBreakdown tasksData={tasksData} progress={progress} updateProgress={updateProgress} completedProjects={completedProjects} />}
       {activeTab === 'Master Shopping List' && <ItemTable items={trackedItems} progress={progress} completedProjects={completedProjects} consumedCounts={consumedCounts} />}
-      {activeTab === 'Top Values' && <TopValuesTab items={trackedItems} />}
+      
+      {/* 4. Pass the new globalItems array to the Top Values Tab */}
+      {activeTab === 'Top Values' && <TopValuesTab items={globalItems} />}
 
     </div>
   );
