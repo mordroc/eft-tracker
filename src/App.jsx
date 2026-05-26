@@ -3,7 +3,6 @@ import './App.css';
 
 const TARKOV_API = 'https://api.tarkov.dev/graphql';
 
-// 1. UPDATED QUERY: We added the global `items` array at the top to fetch everything
 const QUERY = `
   query {
     items {
@@ -44,7 +43,7 @@ const QUERY = `
   }
 `;
 
-// --- Top Values Dashboard (Now a Full Loot Dictionary) ---
+// --- Top Values Dashboard ---
 const TopValuesTab = ({ items }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -52,15 +51,13 @@ const TopValuesTab = ({ items }) => {
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Use .slice(0, 100) so we don't render 3,000+ items at once and freeze the browser.
-  // It will show the top 100 matches based on your search.
   const sortedByFlea = [...filteredItems].sort((a, b) => b.price - a.price).slice(0, 100);
   const sortedByTrader = [...filteredItems].sort((a, b) => b.traderPrice - a.traderPrice).slice(0, 100);
 
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
       <p style={{ color: '#aaa', marginBottom: '15px' }}>
-        <em>Global Loot Dictionary. Search any item in the game to find its best vendor. (Showing top 100 matches to keep the app fast).</em>
+        <em>Global Loot Dictionary. Search any item in the game to find its best vendor. (Showing top 100 matches).</em>
       </p>
       
       <input 
@@ -76,8 +73,6 @@ const TopValuesTab = ({ items }) => {
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-        
-        {/* Flea Market Column */}
         <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444', maxHeight: '70vh', overflowY: 'auto' }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#ff9900', borderBottom: '1px solid #444', paddingBottom: '10px', position: 'sticky', top: 0, backgroundColor: '#222' }}>
             Flea Market Value
@@ -94,11 +89,9 @@ const TopValuesTab = ({ items }) => {
                 </div>
               </li>
             ))}
-            {sortedByFlea.length === 0 && <li style={{ color: '#888', listStyle: 'none', marginLeft: '-25px' }}>No items found.</li>}
           </ol>
         </div>
 
-        {/* Trader Value Column */}
         <div style={{ backgroundColor: '#222', borderRadius: '8px', padding: '20px', border: '1px solid #444', maxHeight: '70vh', overflowY: 'auto' }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#00ff00', borderBottom: '1px solid #444', paddingBottom: '10px', position: 'sticky', top: 0, backgroundColor: '#222' }}>
             Trader Value
@@ -115,27 +108,46 @@ const TopValuesTab = ({ items }) => {
                 </div>
               </li>
             ))}
-            {sortedByTrader.length === 0 && <li style={{ color: '#888', listStyle: 'none', marginLeft: '-25px' }}>No items found.</li>}
           </ol>
         </div>
-
       </div>
     </div>
   );
 };
 
-// --- Master Shopping List (Read-Only Summary) ---
-const ItemTable = ({ items, progress, completedProjects, consumedCounts }) => {
+// --- Master Shopping List (Global Stash Input) ---
+const ItemTable = ({ items, stash, updateStash, stationsData, tasksData, completedProjects }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const remainingHideoutNeed = {};
+  const remainingQuestNeed = {};
+
+  stationsData.forEach(station => {
+    station.levels.forEach(lvl => {
+      if (!completedProjects.includes(`hideout_${station.name}_${lvl.level}`)) {
+        lvl.items.forEach(req => {
+          remainingHideoutNeed[req.id] = (remainingHideoutNeed[req.id] || 0) + req.count;
+        });
+      }
+    });
+  });
+
+  tasksData.forEach(task => {
+    if (!completedProjects.includes(`quest_${task.name}`)) {
+      task.items.forEach(req => {
+        remainingQuestNeed[req.id] = (remainingQuestNeed[req.id] || 0) + req.count;
+      });
+    }
+  });
+
   return (
     <div style={{ marginBottom: '40px', animation: 'fadeIn 0.3s' }}>
       <p style={{ color: '#aaa', marginBottom: '15px' }}>
-        <em>This is your Master Shopping List. Items used in Completed stations/quests are removed from these totals.</em>
+        <em>Global Stash Manager. Add items here. Needs are dynamically calculated based on unbuilt stations.</em>
       </p>
 
       <input 
@@ -154,31 +166,22 @@ const ItemTable = ({ items, progress, completedProjects, consumedCounts }) => {
         <thead>
           <tr style={{ borderBottom: '2px solid #444', backgroundColor: '#222' }}>
             <th style={{ padding: '10px' }}>Item Name</th>
-            <th style={{ padding: '10px', textAlign: 'center' }}>Pending Gathered</th>
+            <th style={{ padding: '10px', textAlign: 'center' }}>In Stash</th>
             <th style={{ padding: '10px' }}>Remaining Hideout Need</th>
             <th style={{ padding: '10px' }}>Remaining Task Need</th>
             <th style={{ padding: '10px' }}>Flea Value</th>
             <th style={{ padding: '10px' }}>Trader Value</th>
             <th style={{ padding: '10px', color: '#ff9900' }}>Value / Square</th>
-            <th style={{ padding: '10px' }}>Action</th>
           </tr>
         </thead>
         <tbody>
           {filteredItems.map(item => {
-            const consumed = consumedCounts[item.id] || { hideout: 0, quest: 0 };
-            const activeHideoutNeed = Math.max(0, item.hideoutNeeded - consumed.hideout);
-            const activeQuestNeed = Math.max(0, item.questNeeded - consumed.quest);
+            const activeHideoutNeed = remainingHideoutNeed[item.id] || 0;
+            const activeQuestNeed = remainingQuestNeed[item.id] || 0;
             const totalNeeded = activeHideoutNeed + activeQuestNeed;
+            const stashCount = stash[item.id] || 0;
 
-            const activeGathered = Object.entries(progress).reduce((sum, [key, count]) => {
-              if (!key.endsWith(`_${item.id}`)) return sum;
-              const projectPrefix = key.substring(0, key.lastIndexOf('_'));
-              if (completedProjects.has(projectPrefix)) return sum; 
-              return sum + count;
-            }, 0);
-
-            const hasEnough = activeGathered >= totalNeeded && totalNeeded > 0;
-            const isHighValue = item.price > 40000 || item.traderPrice > 40000;
+            const hasEnough = stashCount >= totalNeeded && totalNeeded > 0;
             const needsFiR = item.foundInRaidRequired;
             const isTraderHigher = item.traderPrice > item.price;
 
@@ -197,9 +200,18 @@ const ItemTable = ({ items, progress, completedProjects, consumedCounts }) => {
                 </td>
                 
                 <td style={{ padding: '10px', textAlign: 'center' }}>
-                  <span style={{ fontSize: '1.2em', fontWeight: 'bold', color: hasEnough ? '#00ff00' : '#eaeaea' }}>
-                    {activeGathered.toLocaleString()} / {totalNeeded.toLocaleString()}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                    <button onClick={() => updateStash(item.id, stashCount - 1)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '4px 8px', cursor: 'pointer', borderRadius: '4px' }}>-</button>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={stashCount || ''} 
+                      placeholder="0"
+                      onChange={(e) => updateStash(item.id, parseInt(e.target.value) || 0)}
+                      style={{ width: '80px', textAlign: 'center', backgroundColor: '#333', color: 'white', border: '1px solid #555', padding: '4px', borderRadius: '4px' }}
+                    />
+                    <button onClick={() => updateStash(item.id, stashCount + 1)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '4px 8px', cursor: 'pointer', borderRadius: '4px' }}>+</button>
+                  </div>
                 </td>
 
                 <td style={{ padding: '10px' }}>{activeHideoutNeed > 0 ? activeHideoutNeed.toLocaleString() : '-'}</td>
@@ -208,32 +220,12 @@ const ItemTable = ({ items, progress, completedProjects, consumedCounts }) => {
                 <td style={{ padding: '10px', color: isTraderHigher ? '#00ff00' : '#aaa', fontWeight: isTraderHigher ? 'bold' : 'normal' }}>
                   ₽{item.traderPrice.toLocaleString()}
                 </td>
-                
                 <td style={{ padding: '10px', color: '#ff9900', fontWeight: 'bold' }}>
                   ₽{item.valuePerSquare.toLocaleString()}
-                </td>
-
-                <td style={{ padding: '10px' }}>
-                  {(isHighValue && activeGathered >= totalNeeded) || (isHighValue && totalNeeded === 0) ? (
-                    <span style={{ backgroundColor: '#ff9900', color: 'black', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
-                      {isTraderHigher ? 'SELL (Trader)' : 'SELL (Flea)'}
-                    </span>
-                  ) : activeGathered < totalNeeded ? (
-                    <span style={{ backgroundColor: '#3366cc', color: 'white', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>KEEP</span>
-                  ) : (
-                    <span style={{ color: '#888' }}>Done</span>
-                  )}
                 </td>
               </tr>
             );
           })}
-          {filteredItems.length === 0 && (
-            <tr>
-              <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                No items found matching "{searchTerm}"
-              </td>
-            </tr>
-          )}
         </tbody>
       </table>
     </div>
@@ -241,7 +233,7 @@ const ItemTable = ({ items, progress, completedProjects, consumedCounts }) => {
 };
 
 // --- Hideout Station Allocation View ---
-const StationBreakdown = ({ stationsData, progress, updateProgress, completedProjects }) => {
+const StationBreakdown = ({ stationsData, stash, handleBuild, completedProjects }) => {
   const [expanded, setExpanded] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -257,7 +249,7 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
     <div style={{ animation: 'fadeIn 0.3s' }}>
       <input 
         type="text" 
-        placeholder="Search for a station or item (e.g., Corrugated hose)..." 
+        placeholder="Search for a station or item..." 
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         style={{ width: '100%', padding: '12px', marginBottom: '20px', borderRadius: '4px', border: '1px solid #555', backgroundColor: '#222', color: '#eaeaea', fontSize: '16px', boxSizing: 'border-box' }}
@@ -265,21 +257,28 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
         {filteredStations.map(station => {
           const isExpanded = expanded[station.name];
-          const allLevelsComplete = station.levels.length > 0 && station.levels.every(lvl => completedProjects.has(`hideout_${station.name}_${lvl.level}`));
+          const allLevelsComplete = station.levels.length > 0 && station.levels.every(lvl => completedProjects.includes(`hideout_${station.name}_${lvl.level}`));
           
-          const nextLevel = station.levels.find(lvl => !completedProjects.has(`hideout_${station.name}_${lvl.level}`));
+          const nextLevel = station.levels.find(lvl => !completedProjects.includes(`hideout_${station.name}_${lvl.level}`));
           let isStationLocked = false;
           let missingReqs = [];
+          let canBuildNextLevel = false;
           
           if (nextLevel) {
-            missingReqs = nextLevel.stationReqs.filter(req => !completedProjects.has(`hideout_${req.name}_${req.level}`));
+            missingReqs = nextLevel.stationReqs.filter(req => !completedProjects.includes(`hideout_${req.name}_${req.level}`));
             isStationLocked = missingReqs.length > 0;
+            
+            if (!isStationLocked) {
+              canBuildNextLevel = nextLevel.items.every(item => (stash[item.id] || 0) >= item.count);
+            }
           }
 
           const cardBg = allLevelsComplete ? '#111' : (isStationLocked ? '#1a1a1a' : '#222');
+          
           let titleColor = '#ff9900'; 
           if (allLevelsComplete) titleColor = '#666'; 
           else if (isStationLocked) titleColor = '#885522'; 
+          else if (canBuildNextLevel) titleColor = '#00ff00'; // NEW GREEN LOGIC
 
           return (
             <div key={station.name} style={{ backgroundColor: cardBg, borderRadius: '8px', padding: '15px', border: '1px solid #444', transition: 'all 0.3s' }}>
@@ -296,67 +295,65 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
                       Locked - Needs: {missingReqs.map(r => `${r.name} Lv${r.level}`).join(', ')}
                     </span>
                   )}
+                  {canBuildNextLevel && !allLevelsComplete && (
+                    <span style={{ fontSize: '0.85em', color: '#00ff00', display: 'block', marginTop: '6px' }}>
+                      Ready to Build!
+                    </span>
+                  )}
                 </div>
                 <span style={{ fontSize: '1.5em', color: '#aaa', fontWeight: 'bold', marginLeft: '10px' }}>{isExpanded ? '-' : '+'}</span>
               </div>
               
               {isExpanded && station.levels.map(lvl => {
-                const isLevelComplete = completedProjects.has(`hideout_${station.name}_${lvl.level}`);
-                const levelMissingReqs = lvl.stationReqs.filter(req => !completedProjects.has(`hideout_${req.name}_${req.level}`));
+                const projectKey = `hideout_${station.name}_${lvl.level}`;
+                const isLevelComplete = completedProjects.includes(projectKey);
+                
+                const levelMissingReqs = lvl.stationReqs.filter(req => !completedProjects.includes(`hideout_${req.name}_${req.level}`));
                 const isLevelLocked = levelMissingReqs.length > 0 && !isLevelComplete;
                 
-                let headerColor = '#aaa';
-                if (isLevelComplete) headerColor = '#666';
-                if (isLevelLocked) headerColor = '#a85c5c'; 
+                const canBuild = !isLevelLocked && lvl.items.every(item => (stash[item.id] || 0) >= item.count);
 
                 return (
-                  <div key={lvl.level} style={{ 
-                    marginBottom: '15px', 
-                    opacity: isLevelComplete ? 0.4 : 1, 
-                    transition: 'all 0.3s' 
-                  }}>
-                    <h4 style={{ margin: '0 0 10px 0', color: headerColor }}>
-                      Level {lvl.level} 
-                      {isLevelComplete && <span style={{fontSize: '0.8em', color: '#00ff00', marginLeft: '8px'}}>(Built)</span>}
-                    </h4>
+                  <div key={lvl.level} style={{ marginBottom: '15px', opacity: isLevelComplete ? 0.4 : 1, transition: 'all 0.3s' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <h4 style={{ margin: 0, color: isLevelComplete ? '#666' : (isLevelLocked ? '#a85c5c' : '#aaa') }}>
+                        Level {lvl.level}
+                      </h4>
+                      
+                      <label style={{ 
+                        color: canBuild || isLevelComplete ? '#00ff00' : '#666', 
+                        cursor: canBuild || isLevelComplete ? 'pointer' : 'not-allowed',
+                        fontWeight: 'bold', fontSize: '0.9em', display: 'flex', alignItems: 'center', gap: '5px'
+                      }}>
+                        <input 
+                          type="checkbox" 
+                          checked={isLevelComplete} 
+                          disabled={!isLevelComplete && !canBuild} 
+                          onChange={(e) => handleBuild(projectKey, lvl.items, e.target.checked)} 
+                        />
+                        {isLevelComplete ? 'Built!' : 'Build Station'}
+                      </label>
+                    </div>
 
                     <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
                       {lvl.items.map(item => {
-                        const progressKey = `hideout_${station.name}_${lvl.level}_${item.id}`;
-                        const allocatedCount = progress[progressKey] || 0;
-                        const hasEnough = allocatedCount >= item.count;
+                        const stashCount = stash[item.id] || 0;
+                        const hasEnough = stashCount >= item.count;
                         const isItemMatch = searchTerm && item.name.toLowerCase().includes(searchTerm.toLowerCase());
                         
-                        const isCurrency = ['Roubles', 'Euros', 'Dollars'].includes(item.name);
+                        const itemBgColor = isLevelComplete ? '#1a331a' : (hasEnough ? '#1a331a' : (isItemMatch ? '#4a3b1a' : 'transparent'));
 
                         return (
-                          <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '5px', backgroundColor: hasEnough ? '#1a331a' : (isItemMatch ? '#4a3b1a' : 'transparent'), borderRadius: '4px', border: isItemMatch ? '1px solid #ff9900' : 'none' }}>
+                          <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '5px', backgroundColor: itemBgColor, borderRadius: '4px', border: isItemMatch ? '1px solid #ff9900' : 'none' }}>
                             <span style={{ flex: 1, fontWeight: isItemMatch ? 'bold' : 'normal', color: isItemMatch ? '#ff9900' : '#eaeaea' }}>{item.name}</span>
                             
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              {isCurrency ? (
-                                <>
-                                  <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold' }}>
-                                    {item.count.toLocaleString()}
-                                  </span>
-                                  <input 
-                                    type="checkbox" 
-                                    checked={hasEnough}
-                                    onChange={(e) => {
-                                      const amountToUpdate = e.target.checked ? (item.count - allocatedCount) : -allocatedCount;
-                                      updateProgress(progressKey, amountToUpdate);
-                                    }}
-                                    style={{ width: '20px', height: '20px', cursor: 'pointer', marginLeft: '5px' }}
-                                  />
-                                </>
+                              {isLevelComplete ? (
+                                <span style={{ color: '#00ff00', fontWeight: 'bold' }}>✓ Consumed</span>
                               ) : (
-                                <>
-                                  <button onClick={() => updateProgress(progressKey, -1)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>-</button>
-                                  <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold', width: '40px', textAlign: 'center' }}>
-                                    {allocatedCount} / {item.count}
-                                  </span>
-                                  <button onClick={() => updateProgress(progressKey, 1, item.count)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>+</button>
-                                </>
+                                <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold', width: '90px', textAlign: 'right' }}>
+                                  {stashCount.toLocaleString()} / {item.count.toLocaleString()}
+                                </span>
                               )}
                             </div>
                           </li>
@@ -375,7 +372,7 @@ const StationBreakdown = ({ stationsData, progress, updateProgress, completedPro
 };
 
 // --- Task/Quest Allocation View ---
-const TaskBreakdown = ({ tasksData, progress, updateProgress, completedProjects }) => {
+const TaskBreakdown = ({ tasksData, stash, handleBuild, completedProjects }) => {
   const [expanded, setExpanded] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -391,7 +388,7 @@ const TaskBreakdown = ({ tasksData, progress, updateProgress, completedProjects 
     <div style={{ animation: 'fadeIn 0.3s' }}>
       <input 
         type="text" 
-        placeholder="Search for a quest or item (e.g., Gas analyzer)..." 
+        placeholder="Search for a quest or item..." 
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         style={{ width: '100%', padding: '12px', marginBottom: '20px', borderRadius: '4px', border: '1px solid #555', backgroundColor: '#222', color: '#eaeaea', fontSize: '16px', boxSizing: 'border-box' }}
@@ -399,9 +396,16 @@ const TaskBreakdown = ({ tasksData, progress, updateProgress, completedProjects 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
         {filteredTasks.map(task => {
           const isExpanded = expanded[task.name];
-          const isTaskComplete = completedProjects.has(`quest_${task.name}`);
+          const projectKey = `quest_${task.name}`;
+          const isTaskComplete = completedProjects.includes(projectKey);
+          
+          const canBuild = task.items.every(item => (stash[item.id] || 0) >= item.count);
+
           const cardBg = isTaskComplete ? '#111' : '#222';
-          const titleColor = isTaskComplete ? '#666' : '#3366cc';
+          
+          let titleColor = '#3366cc';
+          if (isTaskComplete) titleColor = '#666';
+          else if (canBuild) titleColor = '#00ff00'; // NEW GREEN LOGIC
 
           return (
             <div key={task.name} style={{ backgroundColor: cardBg, borderRadius: '8px', padding: '15px', border: '1px solid #444', opacity: isTaskComplete ? 0.6 : 1, transition: 'all 0.3s' }}>
@@ -409,59 +413,66 @@ const TaskBreakdown = ({ tasksData, progress, updateProgress, completedProjects 
                 onClick={() => toggle(task.name)}
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderBottom: isExpanded ? '1px solid #444' : 'none', paddingBottom: isExpanded ? '10px' : '0', marginBottom: isExpanded ? '15px' : '0' }}
               >
-                <h3 style={{ margin: 0, color: titleColor, textDecoration: isTaskComplete ? 'line-through' : 'none' }}>
-                  {task.name} {isTaskComplete && <span style={{fontSize: '0.6em', color: '#00ff00', textDecoration: 'none'}}>(Turned In)</span>}
-                </h3>
+                <div>
+                  <h3 style={{ margin: 0, color: titleColor, textDecoration: isTaskComplete ? 'line-through' : 'none' }}>
+                    {task.name} {isTaskComplete && <span style={{fontSize: '0.6em', color: '#00ff00', textDecoration: 'none'}}>(Turned In)</span>}
+                  </h3>
+                  {canBuild && !isTaskComplete && (
+                    <span style={{ fontSize: '0.85em', color: '#00ff00', display: 'block', marginTop: '6px' }}>
+                      Ready to Turn In!
+                    </span>
+                  )}
+                </div>
                 <span style={{ fontSize: '1.5em', color: '#aaa', fontWeight: 'bold' }}>{isExpanded ? '-' : '+'}</span>
               </div>
               
               {isExpanded && (
-                <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
-                  {task.items.map(item => {
-                    const progressKey = `quest_${task.name}_${item.id}`;
-                    const allocatedCount = progress[progressKey] || 0;
-                    const hasEnough = allocatedCount >= item.count;
-                    const isItemMatch = searchTerm && item.name.toLowerCase().includes(searchTerm.toLowerCase());
-                    
-                    const isCurrency = ['Roubles', 'Euros', 'Dollars'].includes(item.name);
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+                    <label style={{ 
+                      color: canBuild || isTaskComplete ? '#00ff00' : '#666', 
+                      cursor: canBuild || isTaskComplete ? 'pointer' : 'not-allowed',
+                      fontWeight: 'bold', fontSize: '0.9em', display: 'flex', alignItems: 'center', gap: '5px'
+                    }}>
+                      <input 
+                        type="checkbox" 
+                        checked={isTaskComplete} 
+                        disabled={!isTaskComplete && !canBuild} 
+                        onChange={(e) => handleBuild(projectKey, task.items, e.target.checked)} 
+                      />
+                      {isTaskComplete ? 'Turned In!' : 'Turn In Quest'}
+                    </label>
+                  </div>
 
-                    return (
-                      <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '5px', backgroundColor: hasEnough ? '#1a331a' : (isItemMatch ? '#283655' : 'transparent'), borderRadius: '4px', border: isItemMatch ? '1px solid #3366cc' : 'none' }}>
-                        <span style={{ flex: 1, fontWeight: isItemMatch ? 'bold' : 'normal', color: isItemMatch ? '#6699ff' : '#eaeaea' }}>
-                          {item.name}
-                          {item.foundInRaid && <span style={{ marginLeft: '8px', color: '#ff4d4d', fontSize: '0.7em', border: '1px solid #ff4d4d', padding: '1px 3px', borderRadius: '3px' }}>FiR</span>}
-                        </span>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {isCurrency ? (
-                            <>
-                              <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold' }}>
-                                {item.count.toLocaleString()}
+                  <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
+                    {task.items.map(item => {
+                      const stashCount = stash[item.id] || 0;
+                      const hasEnough = stashCount >= item.count;
+                      const isItemMatch = searchTerm && item.name.toLowerCase().includes(searchTerm.toLowerCase());
+                      
+                      const itemBgColor = isTaskComplete ? '#1a331a' : (hasEnough ? '#1a331a' : (isItemMatch ? '#283655' : 'transparent'));
+
+                      return (
+                        <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '5px', backgroundColor: itemBgColor, borderRadius: '4px', border: isItemMatch ? '1px solid #3366cc' : 'none' }}>
+                          <span style={{ flex: 1, fontWeight: isItemMatch ? 'bold' : 'normal', color: isItemMatch ? '#6699ff' : '#eaeaea' }}>
+                            {item.name}
+                            {item.foundInRaid && <span style={{ marginLeft: '8px', color: '#ff4d4d', fontSize: '0.7em', border: '1px solid #ff4d4d', padding: '1px 3px', borderRadius: '3px' }}>FiR</span>}
+                          </span>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {isTaskComplete ? (
+                              <span style={{ color: '#00ff00', fontWeight: 'bold' }}>✓ Handed Over</span>
+                            ) : (
+                              <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold', width: '90px', textAlign: 'right' }}>
+                                {stashCount.toLocaleString()} / {item.count.toLocaleString()}
                               </span>
-                              <input 
-                                type="checkbox" 
-                                checked={hasEnough}
-                                onChange={(e) => {
-                                  const amountToUpdate = e.target.checked ? (item.count - allocatedCount) : -allocatedCount;
-                                  updateProgress(progressKey, amountToUpdate);
-                                }}
-                                style={{ width: '20px', height: '20px', cursor: 'pointer', marginLeft: '5px' }}
-                              />
-                            </>
-                          ) : (
-                            <>
-                              <button onClick={() => updateProgress(progressKey, -1)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>-</button>
-                              <span style={{ color: hasEnough ? '#00ff00' : '#eaeaea', fontWeight: 'bold', width: '40px', textAlign: 'center' }}>
-                                {allocatedCount} / {item.count}
-                              </span>
-                              <button onClick={() => updateProgress(progressKey, 1, item.count)} style={{ backgroundColor: '#444', color: 'white', border: 'none', padding: '2px 8px', cursor: 'pointer', borderRadius: '4px' }}>+</button>
-                            </>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
               )}
             </div>
           );
@@ -473,23 +484,31 @@ const TaskBreakdown = ({ tasksData, progress, updateProgress, completedProjects 
 
 function App() {
   const [trackedItems, setTrackedItems] = useState([]);
-  const [globalItems, setGlobalItems] = useState([]); // 2. NEW STATE: Holds all 3,000+ items
+  const [globalItems, setGlobalItems] = useState([]);
   const [stationsData, setStationsData] = useState([]);
   const [tasksData, setTasksData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  const [activeTab, setActiveTab] = useState('Top Values');
-  const tabs = ['Top Values', 'Hideout Stations', 'Early Quests', 'Master Shopping List'];
+  const [activeTab, setActiveTab] = useState('Hideout Stations');
+  const tabs = ['Hideout Stations', 'Early Quests', 'Master Shopping List', 'Top Values'];
   
-  const [progress, setProgress] = useState(() => {
-    const savedProgress = localStorage.getItem('tarkov-progress');
-    return savedProgress ? JSON.parse(savedProgress) : {};
+  const [stash, setStash] = useState(() => {
+    const saved = localStorage.getItem('tarkov-tracker-stash-v2');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [completedProjects, setCompletedProjects] = useState(() => {
+    const saved = localStorage.getItem('tarkov-tracker-completed-v2');
+    return saved ? JSON.parse(saved) : [];
   });
 
   useEffect(() => {
-    localStorage.setItem('tarkov-progress', JSON.stringify(progress));
-  }, [progress]);
+    localStorage.setItem('tarkov-tracker-stash-v2', JSON.stringify(stash));
+  }, [stash]);
+
+  useEffect(() => {
+    localStorage.setItem('tarkov-tracker-completed-v2', JSON.stringify(completedProjects));
+  }, [completedProjects]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -499,15 +518,12 @@ function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: QUERY }),
         });
-        
         const json = await response.json();
         processApiData(json.data);
       } catch (err) {
         setError('Failed to fetch data from tarkov.dev');
-        console.error(err);
       }
     };
-
     fetchData();
   }, []);
 
@@ -515,32 +531,23 @@ function App() {
     const itemMap = new Map();
     const stationHierarchy = []; 
     const tasksHierarchy = []; 
-    const allItemsArray = []; // Array for the Top Values tab
+    const allItemsArray = []; 
 
     const getHighestTraderPrice = (itemData) => {
       if (!itemData.sellFor) return 0;
-      const traderPrices = itemData.sellFor
-        .filter(s => s.vendor && s.vendor.name !== 'Flea Market')
-        .map(s => s.price);
+      const traderPrices = itemData.sellFor.filter(s => s.vendor && s.vendor.name !== 'Flea Market').map(s => s.price);
       return traderPrices.length > 0 ? Math.max(...traderPrices) : 0;
     };
 
-    // 3. Process the global item list first
     if (data.items) {
       data.items.forEach(apiItem => {
         const price = apiItem.avg24hPrice || 0;
         const traderPrice = getHighestTraderPrice(apiItem);
         const bestPrice = Math.max(price, traderPrice);
-        
-        // Only include actual lootable/sellable items in the dictionary
         if (bestPrice > 0) {
           const squares = (apiItem.width || 1) * (apiItem.height || 1);
           allItemsArray.push({
-            id: apiItem.id,
-            name: apiItem.name,
-            price: price,
-            traderPrice: traderPrice,
-            valuePerSquare: Math.round(bestPrice / squares)
+            id: apiItem.id, name: apiItem.name, price: price, traderPrice: traderPrice, valuePerSquare: Math.round(bestPrice / squares)
           });
         }
       });
@@ -554,12 +561,10 @@ function App() {
         const traderPrice = getHighestTraderPrice(reqItem);
         const bestPrice = Math.max(price, traderPrice);
         const squares = (reqItem.width || 1) * (reqItem.height || 1); 
-        const valuePerSquare = Math.round(bestPrice / squares);
-
         itemMap.set(itemId, { 
           id: itemId, name: reqItem.name, price: price, traderPrice: traderPrice, 
-          squares: squares, valuePerSquare: valuePerSquare,
-          hideoutNeeded: 0, questNeeded: 0, foundInRaidRequired: false 
+          squares: squares, valuePerSquare: Math.round(bestPrice / squares),
+          foundInRaidRequired: false 
         });
       }
       return itemMap.get(itemId);
@@ -567,26 +572,19 @@ function App() {
 
     data.hideoutStations.forEach(station => {
       const currentStationObj = { name: station.name, levels: [] };
-
       station.levels.forEach(levelObj => {
         const levelNum = levelObj.level;
-        
-        const stationReqs = levelObj.stationLevelRequirements ? levelObj.stationLevelRequirements.map(req => ({
-          name: req.station.name,
-          level: req.level
-        })) : [];
+        const stationReqs = levelObj.stationLevelRequirements ? levelObj.stationLevelRequirements.map(req => ({ name: req.station.name, level: req.level })) : [];
 
         if (levelObj.itemRequirements && levelObj.itemRequirements.length > 0) {
           const levelItemsForHierarchy = []; 
           levelObj.itemRequirements.forEach(req => {
-            const itemData = setupItemData(req.item);
-            itemData.hideoutNeeded += req.count;
+            setupItemData(req.item);
             levelItemsForHierarchy.push({ id: req.item.id, name: req.item.name, count: req.count });
           });
           currentStationObj.levels.push({ level: levelNum, items: levelItemsForHierarchy, stationReqs });
         }
       });
-
       if (currentStationObj.levels.length > 0) stationHierarchy.push(currentStationObj);
     });
 
@@ -595,7 +593,6 @@ function App() {
       task.objectives.forEach(obj => {
         if (obj.item) {
           const itemData = setupItemData(obj.item);
-          itemData.questNeeded += obj.count;
           if (obj.foundInRaid) itemData.foundInRaidRequired = true;
           currentTaskItems.push({ id: obj.item.id, name: obj.item.name, count: obj.count, foundInRaid: obj.foundInRaid });
         }
@@ -603,58 +600,40 @@ function App() {
       if (currentTaskItems.length > 0) tasksHierarchy.push({ name: task.name, items: currentTaskItems });
     });
 
-    const combinedList = Array.from(itemMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-    setTrackedItems(combinedList);
-    stationHierarchy.sort((a, b) => a.name.localeCompare(b.name));
-    setStationsData(stationHierarchy);
-    tasksHierarchy.sort((a, b) => a.name.localeCompare(b.name));
-    setTasksData(tasksHierarchy);
+    setTrackedItems(Array.from(itemMap.values()).sort((a, b) => a.name.localeCompare(b.name)));
+    setStationsData(stationHierarchy.sort((a, b) => a.name.localeCompare(b.name)));
+    setTasksData(tasksHierarchy.sort((a, b) => a.name.localeCompare(b.name)));
     setLoading(false);
   };
 
-  const updateProgress = (key, amount, maxLimit) => {
-    setProgress(prev => {
-      const currentCount = prev[key] || 0;
-      let newCount = currentCount + amount;
-      if (newCount < 0) newCount = 0;
-      if (maxLimit !== undefined && newCount > maxLimit) newCount = maxLimit;
-      return { ...prev, [key]: newCount };
-    });
+  const updateStash = (itemId, newCount) => {
+    setStash(prev => ({ ...prev, [itemId]: Math.max(0, newCount) }));
+  };
+
+  const handleBuild = (projectId, requiredItems, isBuilding) => {
+    if (isBuilding) {
+      setStash(prev => {
+        const newStash = { ...prev };
+        requiredItems.forEach(req => {
+          newStash[req.id] = Math.max(0, (newStash[req.id] || 0) - req.count);
+        });
+        return newStash;
+      });
+      setCompletedProjects(prev => [...prev, projectId]);
+    } else {
+      setStash(prev => {
+        const newStash = { ...prev };
+        requiredItems.forEach(req => {
+          newStash[req.id] = (newStash[req.id] || 0) + req.count;
+        });
+        return newStash;
+      });
+      setCompletedProjects(prev => prev.filter(id => id !== projectId));
+    }
   };
 
   if (loading) return <div style={{ padding: '20px', color: 'white', backgroundColor: '#1e1e1e', minHeight: '100vh' }}>Loading Tarkov Data...</div>;
   if (error) return <div style={{ padding: '20px', color: 'red', backgroundColor: '#1e1e1e', minHeight: '100vh' }}>{error}</div>;
-
-  const completedProjects = new Set();
-  const consumedCounts = {}; 
-
-  stationsData.forEach(station => {
-    station.levels.forEach(lvl => {
-      const projectKey = `hideout_${station.name}_${lvl.level}`;
-      const isComplete = lvl.items.length > 0 && lvl.items.every(item => (progress[`${projectKey}_${item.id}`] || 0) >= item.count);
-      
-      if (isComplete) {
-        completedProjects.add(projectKey);
-        lvl.items.forEach(item => {
-          if (!consumedCounts[item.id]) consumedCounts[item.id] = { hideout: 0, quest: 0 };
-          consumedCounts[item.id].hideout += item.count;
-        });
-      }
-    });
-  });
-
-  tasksData.forEach(task => {
-    const projectKey = `quest_${task.name}`;
-    const isComplete = task.items.length > 0 && task.items.every(item => (progress[`${projectKey}_${item.id}`] || 0) >= item.count);
-    
-    if (isComplete) {
-      completedProjects.add(projectKey);
-      task.items.forEach(item => {
-        if (!consumedCounts[item.id]) consumedCounts[item.id] = { hideout: 0, quest: 0 };
-        consumedCounts[item.id].quest += item.count;
-      });
-    }
-  });
 
   return (
     <div style={{ padding: '20px', backgroundColor: '#1e1e1e', color: '#eaeaea', minHeight: '100vh', fontFamily: 'sans-serif' }}>
@@ -676,11 +655,9 @@ function App() {
         ))}
       </div>
 
-      {activeTab === 'Hideout Stations' && <StationBreakdown stationsData={stationsData} progress={progress} updateProgress={updateProgress} completedProjects={completedProjects} />}
-      {activeTab === 'Early Quests' && <TaskBreakdown tasksData={tasksData} progress={progress} updateProgress={updateProgress} completedProjects={completedProjects} />}
-      {activeTab === 'Master Shopping List' && <ItemTable items={trackedItems} progress={progress} completedProjects={completedProjects} consumedCounts={consumedCounts} />}
-      
-      {/* 4. Pass the new globalItems array to the Top Values Tab */}
+      {activeTab === 'Hideout Stations' && <StationBreakdown stationsData={stationsData} stash={stash} handleBuild={handleBuild} completedProjects={completedProjects} />}
+      {activeTab === 'Early Quests' && <TaskBreakdown tasksData={tasksData} stash={stash} handleBuild={handleBuild} completedProjects={completedProjects} />}
+      {activeTab === 'Master Shopping List' && <ItemTable items={trackedItems} stash={stash} updateStash={updateStash} stationsData={stationsData} tasksData={tasksData} completedProjects={completedProjects} />}
       {activeTab === 'Top Values' && <TopValuesTab items={globalItems} />}
 
     </div>
